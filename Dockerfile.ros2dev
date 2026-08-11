@@ -1,0 +1,19 @@
+FROM ros:jazzy-ros-base
+
+# System packages
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    ros-jazzy-cv-bridge \
+    ros-jazzy-image-transport \
+    ros-jazzy-foxglove-bridge \
+    usbutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# depthai 2.x – v3 ist auf OAK-D Lite (RVC2) noch instabil
+RUN pip install "depthai==2.24.0.0" --break-system-packages
+
+# Auto-source ROS and workspace on every shell
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc && \
+    echo "[[ -f /ros2_ws/install/setup.bash ]] && source /ros2_ws/install/setup.bash" >> /root/.bashrc
+
+WORKDIR /ros2_ws

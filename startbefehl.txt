@@ -1,0 +1,29 @@
+# Image einmalig bauen (nach Dockerfile-Änderungen wiederholen):
+# docker build -f Dockerfile.ros2dev -t scheerenrobot-ros2dev .
+
+# Container starten (ros2_ws gemountet, bleibt nach Stop erhalten):
+docker run -it --net=host \
+  --privileged \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /home/wolke/develop/espidfmicroros/scheerenrobot/ros2_ws:/ros2_ws \
+  --name ros2dev \
+  scheerenrobot-ros2dev bash
+
+# Gestoppten Container wieder starten:
+# docker start -ai ros2dev
+
+  oakd-light
+  # Einmalig: Dependencies installieren
+apt-get update && apt-get install -y ros-jazzy-cv-bridge python3-pip
+pip install depthai --break-system-packages
+
+# Repo klonen
+cd /ros2_ws
+git clone https://github.com/iftahnaf/ros2_oak_d_lite.git src/ros2_oak_d_lite
+
+# Bauen
+colcon build --packages-select ros2_oak_d_lite
+source install/setup.bash
+
+# Starten
+ros2 run oak_d_lite stereo

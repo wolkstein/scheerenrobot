@@ -1,0 +1,19 @@
+# ybMecanum has its own git repo
+ybMecanumWheelMicroRosBot/
+
+# extra_components: directory kept as hint, content excluded
+extra_components/*
+!extra_components/.gitkeep
+
+# ROS2 workspace: only src/ in git
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# depthai crash dumps
+.cache/
