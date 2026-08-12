@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'stereo = oak_d_lite.stereo:main'
+            'stereo = oak_d_lite.stereo:main',
+            'stereo_imu = oak_d_lite.stereo_imu:main',
         ],
     },
 )

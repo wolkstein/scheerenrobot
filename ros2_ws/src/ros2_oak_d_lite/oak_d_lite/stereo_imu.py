@@ -14,7 +14,7 @@ class StereoInertialBridge(Node):
     def __init__(self):
         super().__init__('stereo_imu_bridge')
 
-        self.image_rate = 30
+        self.image_rate = 15
         self.imu_rate = 200
 
         self.create_pipeline()
@@ -41,10 +41,10 @@ class StereoInertialBridge(Node):
 
         # Properties
         self.monoLeft.setBoardSocket(dai.CameraBoardSocket.CAM_B)
-        self.monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+        self.monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
         self.monoLeft.setFps(self.image_rate)
         self.monoRight.setBoardSocket(dai.CameraBoardSocket.CAM_C)
-        self.monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+        self.monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
         self.monoRight.setFps(self.image_rate)
         self.imu.enableIMUSensor(dai.IMUSensor.ACCELEROMETER_RAW, 200)
         self.imu.enableIMUSensor(dai.IMUSensor.GYROSCOPE_RAW, 200)
@@ -61,7 +61,7 @@ class StereoInertialBridge(Node):
         self.right_pub = self.create_publisher(Image, '/camera/right/image_raw', 1)
         self.left_info_pub = self.create_publisher(CameraInfo, 'left/camera_info', 1)
         self.right_info_pub = self.create_publisher(CameraInfo, 'right/camera_info', 1)
-        self.imu_pub = self.create_publisher(Imu, '/imu', 1)
+        self.imu_pub = self.create_publisher(Imu, '/camera/imu', 1)
 
         # bridge
         self.bridge = CvBridge()

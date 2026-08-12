@@ -27,3 +27,18 @@ source install/setup.bash
 
 # Starten
 ros2 run oak_d_lite stereo
+
+# Docker Hilfen
+gestoppten Docker container neu starten
+
+  docker start -ai ros2dev
+
+  # im container
+  source /ros2_ws/install/setup.bash
+  ros2 run oak_d_lite stereo
+
+# foxglow im gleichen kontainer
+docker exec -it ros2dev bash
+# im container
+source /ros2_ws/install/setup.bash
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml

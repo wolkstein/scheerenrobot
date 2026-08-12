@@ -11,7 +11,7 @@ class Bridge(Node):
     def __init__(self):
         super().__init__('oak_d_lite')
 
-        self.rate = 30 # 30hz
+        self.rate = 15 # 30hz
         self.create_pipeline()
         self.run()
 
