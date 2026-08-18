@@ -1,6 +1,9 @@
 # ybMecanum has its own git repo
 ybMecanumWheelMicroRosBot/
 
+# MicroRosServoControlBoard has its own git repo
+MicroRosServoControlBoard/
+
 # extra_components: directory kept as hint, content excluded
 extra_components/*
 !extra_components/.gitkeep

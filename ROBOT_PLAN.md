@@ -199,6 +199,7 @@ IDLE
 - [ ] BehaviorTree.CPP State Machine
 - [ ] Parameter-Server für Toleranzen, Pfade, Tag-IDs
 - [ ] End-to-End-Test
+- [ ] Autostart nach Power-On: docker-compose (micro-ROS Agents + Kamera-Node) + udev-Regeln für stabile Device-Namen (Robot-Board, Lift-Board, OAK-D) statt ttyUSB0/1
 
 ### Phase 6 – Visuelle Inspektion (n. Step)
 - [ ] IMX378 Hauptkamera (AF, 12MP) für Detailaufnahmen
@@ -214,9 +215,16 @@ IDLE
 cd .../ybMecanumWheelMicroRosBot
 idf.py build && idf.py flash
 
-# micro-ROS Agent
+# micro-ROS Agent (Entwicklung: zwei einfache Container, feste USB-Reihenfolge)
+# ttyUSB0 = meistens Mecanum-Robot-Board, ttyUSB1 = meistens Lift/Servo-Board
+# TODO fuer Autostart: docker-compose + udev-Regeln (stabile Namen statt ttyUSB0/1)
 docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
+  --name microros-agent-robot \
   microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB0 -b 921600
+
+docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
+  --name microros-agent-lift \
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB1 -b 921600
 
 # ROS2 Dev Container starten
 docker start -ai ros2dev
