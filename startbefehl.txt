@@ -28,17 +28,20 @@ source install/setup.bash
 # Starten
 ros2 run oak_d_lite stereo
 
-# micro-ROS Agent (Entwicklung: zwei einfache Container, feste USB-Reihenfolge)
-# /dev/ttyUSB0 = meistens Mecanum-Robot-Board, /dev/ttyUSB1 = meistens Lift/Servo-Board
-# TODO sobald Autostart nach Power-On gebraucht wird: docker-compose + udev-Regeln
-# fuer stabile Device-Namen (Robot-Board, Lift-Board, OAK-D) statt ttyUSB0/1.
+# micro-ROS Agent (Entwicklung: zwei einfache Container)
+# Feste Device-Namen per udev-Regel (/etc/udev/rules.d/99-scheerenrobot-esp32.rules,
+# siehe idf-micro-ros-setup.md), gebunden an physisch markierte USB-Buchsen am Pi5.
+# ttyUSB0/1 NICHT verwenden - beide CP2102-Chips melden dieselbe generische
+# USB-Seriennummer "0001", die Nummerierung ist daher nicht enumerationsstabil.
+# TODO sobald Autostart nach Power-On gebraucht wird: docker-compose statt
+# manueller docker run-Aufrufe.
 docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
   --name microros-agent-robot \
-  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB0 -b 921600
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB-robot -b 921600
 
 docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
   --name microros-agent-lift \
-  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB1 -b 921600
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB-lift -b 921600
 
 # Docker Hilfen
 gestoppten Docker container neu starten

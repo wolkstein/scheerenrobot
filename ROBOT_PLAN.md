@@ -199,7 +199,8 @@ IDLE
 - [ ] BehaviorTree.CPP State Machine
 - [ ] Parameter-Server für Toleranzen, Pfade, Tag-IDs
 - [ ] End-to-End-Test
-- [ ] Autostart nach Power-On: docker-compose (micro-ROS Agents + Kamera-Node) + udev-Regeln für stabile Device-Namen (Robot-Board, Lift-Board, OAK-D) statt ttyUSB0/1
+- [x] udev-Regeln für stabile Device-Namen (Robot-Board `/dev/ttyUSB-robot`, Lift-Board `/dev/ttyUSB-lift` statt ttyUSB0/1) – siehe `idf-micro-ros-setup.md`
+- [ ] Autostart nach Power-On: docker-compose (micro-ROS Agents + Kamera-Node), inkl. OAK-D-Kamera in die udev-Regeln aufnehmen
 
 ### Phase 6 – Visuelle Inspektion (n. Step)
 - [ ] IMX378 Hauptkamera (AF, 12MP) für Detailaufnahmen
@@ -215,16 +216,17 @@ IDLE
 cd .../ybMecanumWheelMicroRosBot
 idf.py build && idf.py flash
 
-# micro-ROS Agent (Entwicklung: zwei einfache Container, feste USB-Reihenfolge)
-# ttyUSB0 = meistens Mecanum-Robot-Board, ttyUSB1 = meistens Lift/Servo-Board
-# TODO fuer Autostart: docker-compose + udev-Regeln (stabile Namen statt ttyUSB0/1)
+# micro-ROS Agent (Entwicklung: zwei einfache Container, feste udev-Namen)
+# ttyUSB0/1 NICHT verwenden - beide CP2102-Chips melden dieselbe generische
+# USB-Seriennummer, siehe idf-micro-ros-setup.md
+# TODO fuer Autostart: docker-compose statt manueller docker run-Aufrufe
 docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
   --name microros-agent-robot \
-  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB0 -b 921600
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB-robot -b 921600
 
 docker run -it --rm -v /dev:/dev -v /dev/shm:/dev/shm --privileged --net=host \
   --name microros-agent-lift \
-  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB1 -b 921600
+  microros/micro-ros-agent:jazzy serial --dev /dev/ttyUSB-lift -b 921600
 
 # ROS2 Dev Container starten
 docker start -ai ros2dev
