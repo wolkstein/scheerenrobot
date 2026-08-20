@@ -1,0 +1,169 @@
+menu "micro-ROS example-app settings"
+
+    config MICRO_ROS_APP_STACK
+        int "Stack the micro-ROS app (Bytes)"
+        default 16000
+        help
+        Stack size in Bytes of the micro-ROS app
+
+    config MICRO_ROS_APP_TASK_PRIO
+        int "Priority of the micro-ROS app"
+        default 5
+        help
+        Priority of micro-ros task higher value means higher priority
+
+
+    config MICRO_ROS_DOMAIN_ID
+        int "Ros domain id of the micro-ROS"
+        default 0
+        range 0 101
+        help
+        To avoid interference between different groups of computers running ROS 2 on the same network, set a different domain ID value for each computer group.
+
+    config MICRO_ROS_NAMESPACE
+        string "Ros namespace of the micro-ROS"
+        default ""
+        help
+        The ROS node namespace
+
+    config MICRO_ROS_UART_BAUD
+        int "Uart Baudrate of the micro ros"
+        default 921600
+        help
+        Baudrate of the Uart connection
+
+    config MICRO_ROS_UART_TXD
+        int "Uart TXD Pin of the micro ros"
+        default 1
+        help
+        TXD of the Uart connection
+
+    config MICRO_ROS_UART_RXD
+        int "Uart RXD Pin of the micro ros"
+        default 3
+        help
+        RXD of the Uart connection
+
+    config MICRO_ROS_UART_NUM
+        int "Uart Num of the micro ros"
+        default 2
+        help
+        RXD of the Uart connection
+
+endmenu
+
+menu "Scherentisch / Kamera / Vakuum Hardware"
+
+    menu "GPIO Pins"
+        config LIFT_ENDSTOP_UP_GPIO
+            int "Endschalter oben (Scherentisch auf) GPIO"
+            default 4
+            help
+            Verwendet den internen Pullup des ESP32 (Schalter gegen GND).
+
+        config LIFT_ENDSTOP_DOWN_GPIO
+            int "Endschalter unten (Scherentisch zu) GPIO"
+            default 13
+            help
+            Verwendet den internen Pullup des ESP32 (Schalter gegen GND).
+
+        config LIFT_SERVO_GPIO
+            int "Scherentisch-Servo (Endlosdreher) GPIO"
+            default 32
+
+        config CAMERA_SERVO_GPIO
+            int "Kamera-Pitch-Servo GPIO"
+            default 33
+
+        config VACUUM_RELAY_GPIO
+            int "Vakuumpumpen-Relais (Transistor) GPIO"
+            default 25
+            help
+            Kein Pullup, direkter digitaler Ausgang zum Relais-Transistor.
+            Achtung: nicht galvanisch getrennt.
+    endmenu
+
+    menu "Endschalter- und Fahrtrichtungs-Logik"
+        config LIFT_ENDSTOP_ACTIVE_LOW
+            bool "Endschalter sind aktiv-low"
+            default y
+            help
+            An (y): Schalter zieht den (per internem Pullup) high liegenden
+            Pin beim Auslösen gegen GND (active low) -- Standardverdrahtung,
+            per Hardwaretest am Prototypen bestätigt (2026-08). Aus (n):
+            Schalter legt den Pin beim Auslösen auf high (active high).
+            Dieser Wert ist nur der Startwert beim allerersten Boot -- ab
+            dann per /servo_config-Topic zur Laufzeit überschreibbar (siehe
+            ROBOT_DOKU.md), ohne Neu-Build/Flash.
+
+        config LIFT_DIRECTION_UP_IS_INCREASE
+            bool "Pulsweite > Stopp-Wert fährt Richtung 'oben/auf'"
+            default y
+            help
+            Bei einem Endlos-Servo ist unbekannt, welche PWM-Richtung
+            physisch "auf" bzw. "zu" bedeutet, bis es getestet wurde (siehe
+            ROBOT_DOKU.md). Dieser Wert ist nur der Startwert beim
+            allerersten Boot -- ab dann per /servo_config-Topic zur
+            Laufzeit umschaltbar, ohne Neu-Build/Flash.
+    endmenu
+
+    menu "PWM Sicherheitsgrenzen (hart, gelten immer -- auch beim Jog)"
+        config SERVO_PULSE_ABS_MIN_US
+            int "Absolute Mindest-Pulsweite (us)"
+            default 500
+
+        config SERVO_PULSE_ABS_MAX_US
+            int "Absolute Maximal-Pulsweite (us)"
+            default 2500
+    endmenu
+
+    menu "Scherentisch-Servo Kalibrierung (Default, per /servo_config überschreibbar)"
+        config LIFT_PWM_STOP_US
+            int "Stopp-Pulsweite (us)"
+            default 1500
+
+        config LIFT_PWM_RUN_OFFSET_US
+            int "Offset für normale Fahrt auf/zu, ab Stopp-Pulsweite (us)"
+            default 400
+
+        config LIFT_PWM_JOG_OFFSET_US
+            int "Offset für /scissor/jog Impulse, ab Stopp-Pulsweite (us)"
+            default 50
+            help
+            Bewusst klein gewählt (1450/1550us) für vorsichtiges Antasten
+            bei der Erst-Inbetriebnahme. Bei Bedarf über /servo_config
+            live erhöhen, sobald das Verhalten bekannt/sicher ist.
+
+        config LIFT_PWM_REENGAGE_OFFSET_US
+            int "Offset für automatisches Nachführen in OPEN/CLOSED, ab Stopp-Pulsweite (us)"
+            default 200
+            help
+            Eigener (i.d.R. kleinerer) Wert als LIFT_PWM_RUN_OFFSET_US, da
+            das Nachführen nur eine kleine Korrektur ist (Endschalter im
+            Ruhezustand verloren, z.B. durch Absacken), keine bewusste
+            volle auf/zu-Fahrt.
+
+        config LIFT_TIMEOUT_MS
+            int "Timeout bis ERROR_TIMEOUT, falls Endschalter nicht erreicht wird (ms)"
+            default 8000
+    endmenu
+
+    menu "Kamera-Servo Kalibrierung (Default, per /servo_config überschreibbar)"
+        config CAMERA_PWM_AT_0DEG_US
+            int "Pulsweite bei 0 Grad Pitch (us)"
+            default 1000
+
+        config CAMERA_PWM_AT_90DEG_US
+            int "Pulsweite bei 90 Grad Pitch (us)"
+            default 2000
+    endmenu
+
+    config SCISSOR_JOG_MAX_PULSE_MS
+        int "Max. Impulsdauer je /scissor/jog Nachricht (ms)"
+        default 500
+        help
+        Sicherheitsgrenze: verhindert, dass eine einzelne Jog-Nachricht den
+        Scherentisch-Servo (der die Endschalter-Logik ja bewusst ignoriert)
+        zu lange am Stück laufen lässt.
+
+endmenu
