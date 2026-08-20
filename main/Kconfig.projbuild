@@ -1,0 +1,138 @@
+menu "micro-ROS example-app settings"
+
+    config MICRO_ROS_APP_STACK
+        int "Stack the micro-ROS app (Bytes)"
+        default 16000
+        help
+        Stack size in Bytes of the micro-ROS app
+
+    config MICRO_ROS_APP_TASK_PRIO
+        int "Priority of the micro-ROS app"
+        default 5
+        help
+        Priority of micro-ros task higher value means higher priority
+
+
+    config MICRO_ROS_DOMAIN_ID
+        int "Ros domain id of the micro-ROS"
+        default 0
+        range 0 101
+        help
+        To avoid interference between different groups of computers running ROS 2 on the same network, set a different domain ID value for each computer group.
+        
+    config MICRO_ROS_NAMESPACE
+        string "Ros namespace of the micro-ROS"
+        default ""
+        help
+        The ROS node namespace
+
+    config MICRO_ROS_UART_BAUD
+        int "Uart Baudrate of the micro ros"
+        default 921600
+        help
+        Baudrate of the Uart connection
+
+    config MICRO_ROS_UART_TXD
+        int "Uart TXD Pin of the micro ros"
+        default 43
+        help
+        TXD of the Uart connection
+
+    config MICRO_ROS_UART_RXD
+        int "Uart RXD Pin of the micro ros"
+        default 44
+        help
+        RXD of the Uart connection 
+
+    config MICRO_ROS_UART_NUM
+        int "Uart Num of the micro ros"
+        default 2
+        help
+        RXD of the Uart connection       
+
+menu "Robot physical dimensions"
+
+    config ROBOT_WHEEL_DIAMETER_MM
+        int "Wheel diameter (mm)"
+        default 64
+        help
+        Physical wheel diameter in millimeters.
+        Used as compile-time default; can be overridden at runtime via /calibrate topic.
+
+    config ROBOT_WIDTH_MM
+        int "Track width left/right (mm)"
+        default 152
+        help
+        Distance between left and right wheel contact points in millimeters.
+
+    config ROBOT_LENGTH_MM
+        int "Wheelbase front/rear (mm)"
+        default 105
+        help
+        Distance between front and rear wheel contact points in millimeters.
+
+endmenu
+
+menu "Battery configuration"
+
+    config BATTERY_CELL_COUNT
+        int "Number of cells in series"
+        default 2
+        help
+        Number of Li-ion/LiPo cells in series (2S = 7.4V nominal, 8.4V max).
+
+    config BATTERY_CAPACITY_MAH
+        int "Rated capacity (mAh)"
+        default 2000
+        help
+        Rated pack capacity in mAh, printed on the battery.
+
+    config BATTERY_CELL_VOLTAGE_MAX_MV
+        int "Max voltage per cell (mV)"
+        default 4200
+        help
+        Fully charged voltage per cell. 4.2V is standard for both Li-ion and LiPo.
+
+    config BATTERY_CELL_VOLTAGE_WARN_MV
+        int "Low-battery warning voltage per cell (mV)"
+        default 3450
+        help
+        Per-cell threshold below which the piezo buzzer sounds a periodic
+        low-battery warning (short beep once per second). Deliberately above
+        the cutoff threshold below, to give advance warning before the
+        conservative shutdown point is reached.
+
+    config BATTERY_CELL_VOLTAGE_CUTOFF_MV
+        int "Cutoff voltage per cell (mV)"
+        default 3450
+        help
+        Per-cell low-voltage shutdown threshold. Cell chemistry of this pack is
+        not confirmed (label suggests LiPo or 18650 Li-ion). 3450mV is the
+        conservative LiPo-safe cutoff: using it on an actual Li-ion pack just
+        triggers a slightly early low-battery warning, whereas using a lower
+        Li-ion-typical cutoff (~2800-3000mV) on an actual LiPo pack risks
+        over-discharge damage. Adjust once the cell chemistry is confirmed.
+
+    config BATTERY_TECHNOLOGY
+        int "Battery chemistry (sensor_msgs/BatteryState technology constant)"
+        default 3
+        range 0 8
+        help
+        sensor_msgs/msg/BatteryState POWER_SUPPLY_TECHNOLOGY_* constant:
+        2 = Li-ion, 3 = LiPo. Not confirmed for this pack; default (3, LiPo)
+        matches the conservative cutoff default above.
+
+    config BATTERY_ADC_DIVIDER_FACTOR_X1000
+        int "Voltage divider factor (x1000)"
+        default 4078
+        help
+        Pack voltage = ADC-measured GPIO voltage * this / 1000. Yahboom's
+        nominal stock divider is 4030 (10k/3.3k, factor 4.03), but the
+        board-in-hand measured ~7.070V via ADC against 7.155V on a
+        multimeter (19.08. measurement) -- factor back-calculated as
+        7.155 / (7.070 / 4.03) = 4.078, used here instead. Re-measure and
+        adjust if this board's actual divider resistors differ.
+
+endmenu
+
+endmenu
