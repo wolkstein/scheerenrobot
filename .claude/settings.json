@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(**)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(npm run *)",
+      "Bash(npm test)"
+    ],
+    "deny": [
+      "Read(node_modules/**)",
+      "Read(build/**)",
+      "Read(dist/**)",
+      "Read(.next/**)",
+      "Read(/tmp/**)",
+      "Read(.git/**)",
+      "Edit(node_modules/**)",
+      "Edit(build/**)",
+      "Edit(dist/**)",
+      "Edit(.env)",
+      "Bash(sudo *)",
+      "Bash(rm -rf *)"
+    ],
+    "additionalDirectories": []
+  }
+}
+
