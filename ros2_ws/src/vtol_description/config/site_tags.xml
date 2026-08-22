@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  Feste AprilTag-Positionen der Umgebung (Hanger + Landeplatz), jeweils in
+  der "map"-Frame. Im Gegensatz zu vtol.urdf.xacro sind das keine Gelenke
+  eines Starrkörpers, sondern unabhängige, fest im Raum stehende Landmarken
+  -- deshalb eigenes, einfaches Schema statt URDF.
+
+  Ein Node liest diese Datei einmal beim Start ein und published pro
+  <tag>-Eintrag einen statischen Transform map -> tag_<id> (siehe
+  ROBOT_PLAN.md: bekannte Landmarken = absolute Pose-Korrektur, kein SLAM
+  nötig). size_m ist die Kantenlänge der schwarzen Tag-Fläche (ohne weißen
+  Rand), wie von apriltag_ros erwartet.
+
+  Einheiten: Meter/Radiant. Alle Koordinaten unten sind PLATZHALTER (noch
+  nicht eingemessen) -- Landeplatz hat laut Planung 4 Tags an den
+  Außenecken, Hanger darf großzügiger/dichter getaggt werden (siehe
+  ROBOT_PLAN.md).
+-->
+<site_tags map_frame="map">
+
+  <landeplatz>
+    <!-- TODO: reale Positionen der 4 Eck-Tags einmessen -->
+    <tag id="0" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+    <tag id="1" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+    <tag id="2" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+    <tag id="3" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+  </landeplatz>
+
+  <hanger>
+    <!-- TODO: reale Tor-/Innen-Tags ergänzen, sobald geplant/angebracht -->
+    <tag id="10" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+    <tag id="11" family="tag36h11" size_m="0.30" x="0" y="0" z="0" roll="0" pitch="0" yaw="0"/>
+  </hanger>
+
+</site_tags>

@@ -38,7 +38,14 @@ Keine GNSS-Navigation – ausschließlich AprilTag-basierte Lokalisierung.
 ### Umgebung
 - Hanger: AprilTags innen (Ladeposition) + außen (Einfahrt)
 - Landeplatz: AprilTags an 4 Außenecken
-- Flächenumrandung: virtuell konfigurierbar (YAML), flach
+- Flächenumrandung: virtuell konfigurierbar (XML), flach
+- Start-/Absetzposition (DEPLOY, Hanger → Landeplatz): fixer, immer gleicher
+  Punkt mittig auf dem Landeplatz, mit fixem (windabhängigem) Ziel-Heading --
+  Platz ändert sich nach Einrichtung nie, Heading grob per IMU herstellbar
+  (±15° egal). Unabhängig vom VTOL-Frame-Baum (der ist nur für den
+  RETRIEVE-Fall, wo Position/Heading nach der Landung erst unbekannt sind
+  und über die Ruder-Tags gefunden werden müssen) -- gehört in die
+  Site-/Mission-Config, nicht in `vtol.urdf.xacro`.
 
 ---
 
@@ -48,13 +55,14 @@ Keine GNSS-Navigation – ausschließlich AprilTag-basierte Lokalisierung.
 |---|---|---|
 | `scheerenbot_teleop` | ✓ vorhanden | Keyboard-Steuerung |
 | `oak_d_lite` | ✓ vorhanden | Stereo-Kamera Node (depthai 2.x) |
-| `scheerenbot_description` | ausstehend | URDF Roboter |
-| `vtol_description` | ausstehend | URDF VTOL + Tag-Frames + Gondola-Frames |
+| `scheerenbot_description` | ⚙ Grundgerüst vorhanden | `scheerenbot.urdf.xacro` (`camera_pivot`-Gelenk + Stereo-Linsen-Frames, kommentierte Vorlage zum Vermessen; Räder/restliches Chassis fehlen noch) |
+| `vtol_description` | ⚙ Grundgerüst vorhanden | `vtol.urdf.xacro` (Tag-/Gondola-/Pickup-Frames, Maße noch Platzhalter) + `site_tags.xml` (Hanger/Landeplatz-Tags, noch Platzhalter) |
 | `scheerenbot_bringup` | ausstehend | Launch-Files für gesamtes System |
 | `scheerenbot_localization` | ausstehend | EKF (Odom+IMU), AprilTag→Map |
 | `scheerenbot_navigation` | ausstehend | Nav2 Konfiguration, Costmap, Waypoints |
 | `scheerenbot_mission` | ausstehend | BehaviorTree.CPP State Machine |
 | `scheerenbot_lift` | ausstehend | Scherentisch + Vakuum Interface (ESP32 #2) |
+| `scheerenbot_webui` | ausstehend, niedrige Priorität | Mini-Webserver + API auf dem Pi, Config-UI (liest/schreibt XML-Configs), ROS-Node-Status, Mini-Joystick |
 
 ---
 
@@ -72,9 +80,13 @@ map
     ├── vtol_rudder_left  (aus VTOL-URDF)
     ├── vtol_rudder_right
     ├── vtol_belly_tag    (nach unten, Feinausrichtung)
-    ├── vtol_gondola_left (→ Forbidden Zone Radius)
-    ├── vtol_gondola_right
-    └── vtol_pickup_point (Scherentisch-Ziel)
+    ├── vtol_gondola_left_front_inner   (→ Forbidden Zone Radius, 6 Gondeln
+    ├── vtol_gondola_left_outer          lt. CAD, 3 Paare ringförmig um den
+    ├── vtol_gondola_left_rear_inner     Rumpf: vorne-innen/außen/hinten-innen)
+    ├── vtol_gondola_right_front_inner
+    ├── vtol_gondola_right_outer
+    ├── vtol_gondola_right_rear_inner
+    └── vtol_pickup_point (Nav2-Fahrziel, danach fester Weg bis Aufnahme)
 ```
 
 ---
@@ -137,7 +149,7 @@ LOCALIZE_VTOL
 
 PLAN_APPROACH
   Nav2 berechnet Pfad unter VTOL
-  Pflichtweg um Gondeln herum (konfigurierbar per YAML)
+  Pflichtweg um Gondeln herum (konfigurierbar per XML)
   └─ Pfad OK ──►
 
 NAVIGATE_UNDER_VTOL
@@ -178,16 +190,18 @@ IDLE
 - [ ] AprilTag-Kalibrierung (CameraInfo mit echten Werten)
 - [ ] `apriltag_ros` Package → Tag-Poses in TF2
 - [ ] `robot_localization` EKF: Odom + IMU → `/odom`
-- [ ] Statische Map (Hanger + Landeplatz) als YAML
+- [x] Statische Map (Hanger + Landeplatz) als XML -- Grundgerüst: `vtol_description/config/site_tags.xml` (Platzhalter-Koordinaten, noch nicht eingemessen)
 
 ### Phase 2 – VTOL-Erkennung
-- [ ] VTOL URDF (Geometrie, Tag-Positionen, Gondola-Positionen)
+- [x] VTOL URDF (Geometrie, Tag-Positionen, Gondola-Positionen) -- Grundgerüst: `vtol_description/urdf/vtol.urdf.xacro` (Länge/Spannweite real, restliche Positionen noch Platzhalter)
 - [ ] VTOL-Pose-Publisher: AprilTag → `vtol_base` in map
 
 ### Phase 3 – Navigation
 - [ ] Nav2 Konfiguration (Costmap, Planner, Controller)
 - [ ] Forbidden-Zone-Plugin für Gondeln
-- [ ] Approach-Pfad als YAML-Waypoints
+- [ ] Approach-Pfad als XML-Waypoints
+- [ ] Fixe Start-/Absetzposition auf dem Landeplatz (DEPLOY-Fall, siehe
+      "Umgebung" oben) als eigener Wegpunkt, unabhängig vom VTOL-Frame-Baum
 
 ### Phase 4 – Scherentisch & Feinausrichtung (wenn ESP32 #2 vorhanden)
 - [ ] ESP32 #2 Firmware (micro-ROS, Servo, Endschalter, Relais)
@@ -205,6 +219,12 @@ IDLE
 ### Phase 6 – Visuelle Inspektion (n. Step)
 - [ ] IMX378 Hauptkamera (AF, 12MP) für Detailaufnahmen
 - [ ] Inspection-Node nach DOCK
+
+### Phase 7 – Web-Konfigurationsoberfläche (niedrigste Priorität, ganz am Ende)
+- [ ] Mini-Webserver + API auf dem Pi (`scheerenbot_webui`)
+- [ ] Config-UI: liest/schreibt die XML-Configs (`site_tags.xml`, `vtol.urdf.xacro`-Maße, o.ä.)
+- [ ] Anzeige laufender ROS2-Nodes im Webinterface
+- [ ] Einfacher Joystick/Steuerungswidget im Browser
 
 ---
 

@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<!--
+  VTOL reference geometry (1:2 wooden prototype simulates this at half scale).
+
+  Purpose: gives every fixed point on the VTOL (rudder tags, belly CG tag,
+  nacelle forbidden zones, pickup point) a named TF frame, all defined
+  relative to vtol_base. vtol_base itself is NOT anchored to the map here --
+  a separate node computes map -> vtol_base once the rudder tags are
+  detected (see ROBOT_PLAN.md, RETRIEVE mission), and robot_state_publisher
+  (fed this file's expanded URDF) publishes the rest of this tree
+  automatically from that one anchor.
+
+  This file is only about the RETRIEVAL case (VTOL found after landing at
+  an unknown pose) -- the separate DEPLOY case (robot carries the VTOL from
+  the hangar to the launch position) uses a fixed, always-the-same map-frame
+  waypoint instead (known pad-center position + wind-relative heading, +-15
+  deg via IMU is fine there), which does NOT depend on this VTOL frame tree
+  at all and belongs in the site/mission config instead.
+
+  Units: meters/radians (REP-103). Source CAD views were in mm.
+  Convention: vtol_base origin = center of gravity (CG), X forward, Y left,
+  Z up.
+
+  All numeric offsets below are PLACEHOLDERS (xyz="0 0 0") until measured
+  from the CAD -- only overall length/span are real (see properties below).
+  Fill in real offsets as they're measured; nothing downstream should need
+  to change shape once real numbers replace the placeholders.
+
+  Tag orientation: AprilTag frame convention (which axis points out of the
+  tag face) depends on the apriltag_ros version in use -- verify against
+  that before trusting the rpy placeholders on the tag frames below.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="vtol">
+
+  <!-- Real, measured values (from CAD, see private-images/) -->
+  <xacro:property name="vtol_length_m" value="1.472"/>
+  <xacro:property name="vtol_span_m" value="2.99585"/>
+
+  <link name="vtol_base"/>
+
+  <!-- Ruder-Tags: Groberkennung, vordere Kamera. Positionen TODO messen. -->
+  <link name="vtol_rudder_left"/>
+  <joint name="vtol_rudder_left_joint" type="fixed">
+    <parent link="vtol_base"/>
+    <child link="vtol_rudder_left"/>
+    <!-- TODO: reale Position/Ausrichtung des linken Seitenruder-Tags -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="vtol_rudder_right"/>
+  <joint name="vtol_rudder_right_joint" type="fixed">
+    <parent link="vtol_base"/>
+    <child link="vtol_rudder_right"/>
+    <!-- TODO: reale Position/Ausrichtung des rechten Seitenruder-Tags -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Schwerpunkt-Tag: Feinausrichtung, nach unten gerichtet, obere Kamera
+       des Roboters. Ungefähre Lage siehe private-images/VtolUntenTagposition.png
+       (rotes Quadrat), knapp vor dem eingezeichneten CG (blaues Kreuz).
+       Position/Ausrichtung TODO messen. -->
+  <link name="vtol_belly_tag"/>
+  <joint name="vtol_belly_tag_joint" type="fixed">
+    <parent link="vtol_base"/>
+    <child link="vtol_belly_tag"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Nav2-Fahrziel für die Unterfahrt (Retrieval-Fall): sobald erreicht,
+       übernimmt der geskriptete/feste Weg + Bauch-Tag-Feinkorrektur bis zur
+       eigentlichen Aufnahmeposition -- ab hier keine laufende freie
+       Navigation mehr nötig. Position TODO festlegen. -->
+  <link name="vtol_pickup_point"/>
+  <joint name="vtol_pickup_point_joint" type="fixed">
+    <parent link="vtol_base"/>
+    <child link="vtol_pickup_point"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Triebwerksgondeln als Forbidden Zones fürs Pfadplanen unter dem VTOL.
+       6 Stück (nicht 4 -- per CAD-Fotos vom 2026-08-22 bestätigt, markiert
+       in private-images/VtolUntenTagposition.png), 3 symmetrische Paare je
+       Seite: vorne-innen (nah am Rumpf, weit vorn), außen (mittig auf der
+       Tragfläche), hinten-innen (nah am Rumpf, am Flügelknick) -- ringförmig
+       um den Rumpf verteilt. Radius/Höhe/Position TODO messen --
+       Platzhalter-Zylinder. -->
+  <xacro:macro name="vtol_gondola" params="name x y z radius:=0.05 height:=0.15">
+    <link name="${name}">
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${radius}" length="${height}"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="vtol_base"/>
+      <child link="${name}"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:vtol_gondola name="vtol_gondola_left_front_inner"  x="0" y="0" z="0"/>
+  <xacro:vtol_gondola name="vtol_gondola_left_outer"        x="0" y="0" z="0"/>
+  <xacro:vtol_gondola name="vtol_gondola_left_rear_inner"   x="0" y="0" z="0"/>
+  <xacro:vtol_gondola name="vtol_gondola_right_front_inner" x="0" y="0" z="0"/>
+  <xacro:vtol_gondola name="vtol_gondola_right_outer"       x="0" y="0" z="0"/>
+  <xacro:vtol_gondola name="vtol_gondola_right_rear_inner"  x="0" y="0" z="0"/>
+
+</robot>

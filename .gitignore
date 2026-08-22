@@ -14,3 +14,6 @@ __pycache__/
 
 # depthai crash dumps
 .cache/
+
+# private reference images (VTOL CAD screenshots, robot photos w/ GPS EXIF) -- never share
+private-images/

@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!--
+  Scheerenrobot-Chassis + Kamera-Pitch-Mechanik -- Vorlage zum Vermessen.
+
+  Aktuell nur der Teil, der gerade vermessen wird (camera_pivot + Stereo-
+  Linsen). Räder/restliches Chassis kommen später dazu, wenn's soweit ist.
+
+  Konvention: REP-103 (ROS-Standard) -- X=vorne, Y=links, Z=oben,
+  rechtshändiges Koordinatensystem. base_link-Ursprung: TODO festlegen,
+  üblich ist mittig auf der Antriebsachse, auf Bodenhöhe.
+
+  camera_pivot ist ein ECHTES Gelenk (type="revolute", nicht "fixed"!): es
+  dreht 0°(vorne)-90°(oben) um seine eigene Y-Achse (Pitch, siehe
+  ROBOT_PLAN.md). Der <origin> im Joint beschreibt die Lage der Drehachse
+  relativ zu base_link BEI 0° (Kamera schaut nach vorne) -- nicht bei 90°.
+  Alles, was an camera_pivot hängt, dreht sich mit ihm mit.
+
+  camera_left_optical / camera_right_optical sind dagegen FIXED-Joints
+  relativ zu camera_pivot: sie sitzen starr im Kameragehäuse und ändern
+  ihre Lage relativ zum Pivot nie, egal welcher Pitch-Winkel gerade
+  eingestellt ist. Referenzpunkt ist jeweils die optische Linsenmitte,
+  nicht der Bildsensor-Chip.
+
+  Herkunft der Platzhalter-Kommentare: private-images/KameraOffsets-*.png +
+  private-images/test-zumverstandniss.png (siehe Chat-Verlauf dieser
+  Session) -- Beträge (Millimeter) bekannt, aber Vorzeichen/Nullpunkte noch
+  nicht abschließend bestätigt. Vor dem Eintragen also nochmal gegenprüfen,
+  nicht blind übernehmen.
+
+  Zum Nachschlagen beim Vermessen/Eintragen:
+  - http://wiki.ros.org/urdf/XML/joint (Joint-Typen, <origin>/<axis>/<limit>)
+  - REP-103: https://www.ros.org/reps/rep-0103.html (Achsenkonvention)
+  - https://index.ros.org/p/xacro/ (falls xacro:property/Makros gebraucht werden)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="scheerenbot">
+
+  <!-- TODO: Ursprung/Lage von base_link relativ zum realen Chassis festlegen -->
+  <link name="base_link"/>
+
+  <!-- Kamera-Pitch-Gelenk. Grobe Lage laut Skizze
+       (private-images/test-zumverstandniss.png): X ungefähr über der
+       vorderen Radachse, Z ungefähr auf Höhe der oberen Chassis-Kante.
+       Exakte xyz TODO messen. -->
+  <link name="camera_pivot"/>
+  <joint name="camera_pivot_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="camera_pivot"/>
+    <!-- TODO: exakte Position der Drehachse relativ zu base_link, bei
+         Kamera in 0°/vorne-Stellung gemessen -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- 0° = vorne (Ausgangsstellung), 90° = oben (siehe ROBOT_PLAN.md) -->
+    <limit lower="0" upper="1.5708" effort="10" velocity="1"/>
+  </joint>
+
+  <!-- Gemessene Beträge (aus KameraOffsets-*.png, Ursprung = camera_pivot,
+       Kamera in 0°/vorne-Stellung):
+         linke Linse:  vorne(X)=27,27mm  links(Y)=14,00mm  oben(Z)=30,14mm(?)
+         rechte Linse: vorne(X)=27,27mm  links(Y)=54,00mm  oben(Z)=30,14mm(?)
+       "oben(Z)" hier noch NICHT final bestätigt -- könnte auch "unten"
+       sein, siehe letzte Chat-Nachricht dazu. Vorzeichen von links(Y)
+       ebenfalls gegenprüfen: positiv = Roboter-links laut Klärung im Chat.
+       Linsenpaar-Mitte liegt laut Aussage ~5mm links der Roboter-X-
+       Mittelachse -- ergibt sich automatisch aus den beiden Y-Werten
+       unten, wenn sie korrekt (vorzeichenrichtig) eingetragen sind; kein
+       separater Korrekturwert nötig. -->
+  <link name="camera_left_optical"/>
+  <joint name="camera_left_optical_joint" type="fixed">
+    <parent link="camera_pivot"/>
+    <child link="camera_left_optical"/>
+    <!-- TODO: reale, vorzeichenrichtige Werte eintragen (siehe Kommentar oben) -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_right_optical"/>
+  <joint name="camera_right_optical_joint" type="fixed">
+    <parent link="camera_pivot"/>
+    <child link="camera_right_optical"/>
+    <!-- TODO: reale, vorzeichenrichtige Werte eintragen (siehe Kommentar oben) -->
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>
