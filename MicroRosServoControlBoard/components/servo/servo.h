@@ -14,16 +14,22 @@
 extern "C" {
 #endif
 
-/** Identifies which of the two servo outputs a call applies to. */
+/** Identifies which servo output a call applies to. */
 typedef enum
 {
     SERVO_CHANNEL_LIFT = 0,   /**< Scissor-lift endless-rotation servo (G32). */
     SERVO_CHANNEL_CAMERA = 1, /**< Camera-pitch positional servo (G33). */
+    SERVO_CHANNEL_PUMP = 2,   /**< Vacuum pump actuation servo (G25), only
+                                *   configured when CONFIG_VACUUM_ACTUATION_PWM
+                                *   is selected -- see pump.h. */
 } servo_channel_t;
 
 /**
- * @brief Configure the LEDC timer and both servo channels and start them at
- *        their configured "stop"/neutral pulse.
+ * @brief Configure the LEDC timer and the lift/camera servo channels
+ *        (started at their configured "stop"/neutral pulse), plus the pump
+ *        channel's LEDC hardware when CONFIG_VACUUM_ACTUATION_PWM is
+ *        selected -- pump.c's Pump_Init() drives its actual initial pulse
+ *        once servo_config's calibration is available.
  *
  * Must be called once during startup before any other Servo_*() function.
  */

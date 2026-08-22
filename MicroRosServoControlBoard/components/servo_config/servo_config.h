@@ -45,6 +45,26 @@ int ServoConfig_Get_LiftPwmReengageOffsetUs(void);
 int ServoConfig_Get_LiftTimeoutMs(void);
 
 /**
+ * @brief Pulse width in microseconds for the pump's "off" endpoint.
+ *
+ * Only meaningful when CONFIG_VACUUM_ACTUATION_PWM is selected (see
+ * pump.h) -- unused in digital-relay mode.
+ */
+int ServoConfig_Get_VacuumPwmMinUs(void);
+
+/** @brief Pulse width in microseconds for the pump's "on" endpoint. See ServoConfig_Get_VacuumPwmMinUs(). */
+int ServoConfig_Get_VacuumPwmMaxUs(void);
+
+/**
+ * @brief Whether the pump's on/off pulse-width mapping is inverted.
+ * @return Zero: bool true (on) maps to vacuum_pwm_max_us, false (off) to
+ *         vacuum_pwm_min_us. Non-zero: swapped -- lets an operator correct
+ *         the servo's physical mounting orientation via `/servo_config`
+ *         without touching the calibrated endpoints themselves.
+ */
+int ServoConfig_Get_VacuumPwmInvert(void);
+
+/**
  * @brief Whether the endstop switches are wired active-low.
  * @return Non-zero if active-low (triggered = GPIO reads low), zero if
  *         active-high (triggered = GPIO reads high). Kconfig
@@ -78,12 +98,17 @@ int ServoConfig_Get_LiftDirectionUpIsIncrease(void);
  * @param lift_timeout_ms       Max. auf/zu movement time (ms) before ERROR_TIMEOUT.
  * @param lift_endstop_active_low Non-zero = active-low, zero = active-high (see ServoConfig_Get_LiftEndstopActiveLow()).
  * @param lift_direction_up_is_increase Non-zero = pulse > stop drives up, zero = pulse < stop drives up.
+ * @param vacuum_pwm_min_us     Pulse width (us) for the pump's "off" endpoint (PWM mode only).
+ * @param vacuum_pwm_max_us     Pulse width (us) for the pump's "on" endpoint (PWM mode only).
+ * @param vacuum_pwm_invert     Non-zero = swap which endpoint means on/off (see ServoConfig_Get_VacuumPwmInvert()).
  */
 void ServoConfig_Save(int camera_pwm_min_us, int camera_pwm_max_us,
                        int lift_pwm_stop_us, int lift_pwm_run_offset_us,
                        int lift_pwm_jog_offset_us, int lift_pwm_reengage_offset_us,
                        int lift_timeout_ms, int lift_endstop_active_low,
-                       int lift_direction_up_is_increase);
+                       int lift_direction_up_is_increase,
+                       int vacuum_pwm_min_us, int vacuum_pwm_max_us,
+                       int vacuum_pwm_invert);
 
 #ifdef __cplusplus
 }

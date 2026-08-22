@@ -5,6 +5,7 @@ benutzt. Abgrenzung zu den anderen Doku-Dateien:
 
 - `ROBOT_PLAN.md` – Architektur, Mission, Hardware-Planung, Phasen-Fortschritt
 - `idf-micro-ros-setup.md` – ESP-IDF-Build-/Flash-Referenz für die Firmware-Entwicklung
+- `ROS_INTERFACE.md` – kompakte Topic/Typ/Feld-Referenz für ROS2-Code (`ros2_ws`), ohne Prosa/Beispiele
 - **diese Datei** – wie man den fertig geflashten Roboter über ROS2 *bedient*
 
 Wächst mit dem Projekt: neue Topics/Features kommen als eigene Abschnitte dazu.
@@ -125,6 +126,7 @@ ROS-Seite nötig.
 | `/vacuum/cmd` | `std_msgs/Bool` | Sub | `true`=Pumpe an, `false`=aus |
 | `/scissor/jog` | `std_msgs/Int32MultiArray` | Sub | Notfall/Einrichtung, ignoriert Endschalter (siehe unten) |
 | `/servo_config` | `std_msgs/Int32MultiArray` | Sub | PWM-Kalibrierung setzen, NVS-persistiert |
+| `/servo_config_state` | `std_msgs/Int32MultiArray` | Pub, 5Hz | Aktuell aktive PWM-Kalibrierung, gleiches Werte-Layout wie `/servo_config` (siehe unten) |
 | `/telemetry` | `std_msgs/Int32MultiArray` | Pub, 5Hz | Zustand + Rohdaten (siehe unten) |
 
 ### Pin-Belegung
@@ -133,9 +135,24 @@ ROS-Seite nötig.
 |---|---|---|
 | 4 | Endschalter Scherentisch oben (Position "auf") | interner Pullup, aktiv-low (Standardverdrahtung, per Hardwaretest bestätigt) |
 | 13 | Endschalter Scherentisch unten (Position "zu") | interner Pullup, aktiv-low |
-| 25 | Vakuumpumpen-Relais (Transistor) | Digitalausgang, **nicht galvanisch getrennt** |
+| 25 | Vakuumpumpe | Digitalausgang (Relais/Transistor) **oder** PWM-Servo, per Kconfig `VACUUM_ACTUATION_MODE` (Build-Zeit-Wahl, siehe unten) |
 | 32 | Scherentisch-Servo (Endlosdreher) | PWM 1000–2000µs, 1500µs=Stopp |
 | 33 | Kamera-Pitch-Servo (konventionell) | PWM, Endpunkte kalibrierbar (0°/90°) |
+
+**Vakuumpumpen-Ansteuerung (GPIO 25):** Ursprünglich ein direkter
+Digitalausgang zu einem Relais-Transistor (**nicht galvanisch getrennt**).
+Am Prototyp verursachte das Abschalten der Relaisspule trotz
+Freilaufdiode/anderer elektrischer Vorkehrungen einen induktiven
+Spannungsimpuls, der den ESP32 in einen unklaren Zustand versetzt hat —
+deshalb wurde als Fix ein Servo eingebaut, das die Pumpe zwischen zwei
+kalibrierten PWM-Endpositionen umschaltet, genau wie die Scherentisch-/
+Kamera-Servos. Beide Varianten bleiben als Kconfig-Auswahl erhalten
+(`idf.py menuconfig` → "Scherentisch / Kamera / Vakuum Hardware" →
+"Vakuumpumpen-Ansteuerungsart"), da eine künftige Revision voraussichtlich
+auf ein Halbleiterrelais wechselt. Die Auswahl ist reine Build-Zeit-Config
+(kein Neu-Flash-freies Umschalten) — `/vacuum/cmd` und `vacuum_state` in
+`/telemetry` bleiben in beiden Fällen ein einfaches an/aus (Bool), nur die
+Hardware-Ansteuerung darunter ändert sich.
 
 Alle Werte über `idf.py menuconfig` → "Scherentisch / Kamera / Vakuum
 Hardware" änderbar (Kconfig-Defaults, siehe `main/Kconfig.projbuild`).
@@ -220,7 +237,7 @@ ros2 topic pub --once /scissor/jog std_msgs/msg/Int32MultiArray "{data: [1, -1, 
 
 ### `/servo_config` — PWM-Kalibrierung persistieren
 
-`std_msgs/Int32MultiArray`, **genau 9 Werte in fester Reihenfolge**, sonst
+`std_msgs/Int32MultiArray`, **genau 12 Werte in fester Reihenfolge**, sonst
 wird die Nachricht verworfen (Fehlerlog, kein Crash). Wird sofort wirksam
 **und** ins NVS persistiert (Namespace `servocfg`, übersteht Reboot).
 
@@ -235,6 +252,28 @@ wird die Nachricht verworfen (Fehlerlog, kein Crash). Wird sofort wirksam
 | 6 | `lift_timeout_ms` | ms | `8000` | Max. Fahrzeit bis `ERROR_TIMEOUT` |
 | 7 | `lift_endstop_active_low` | `0`/`1` | `1` | `1`=aktiv-low (Standard), `0`=aktiv-high — Polarität der Endschalter, zur Laufzeit korrigierbar |
 | 8 | `lift_direction_up_is_increase` | `0`/`1` | `1` | `1`=Puls über Stopp fährt "auf", `0`=Puls unter Stopp fährt "auf" — Fahrtrichtung, zur Laufzeit korrigierbar |
+| 9 | `vacuum_pwm_min_us` | µs | `1000` | Pulsweite am "Aus"-Endpunkt der Pumpe (nur PWM-Ansteuerungsmodus) |
+| 10 | `vacuum_pwm_max_us` | µs | `2000` | Pulsweite am "An"-Endpunkt der Pumpe (nur PWM-Ansteuerungsmodus) |
+| 11 | `vacuum_pwm_invert` | `0`/`1` | `0` | `1`=An/Aus-Zuordnung vertauscht (An→`vacuum_pwm_min_us`) — korrigiert spiegelverkehrten Servo-Einbau, ohne die Endpunkte selbst anzufassen |
+
+Index 9–11 sind im Digitalausgang-Modus (`VACUUM_ACTUATION_DIGITAL`,
+Standard) wirkungslos, werden aber trotzdem persistiert — die Nachricht
+braucht immer alle 12 Werte, unabhängig vom gewählten Ansteuerungsmodus.
+
+**`-1` = "diesen Wert unverändert lassen":** Da kein Feld hier je negativ
+sein kann (alles Pulsweiten/Offsets in µs, ein Timeout in ms oder ein
+0/1-Flag), ist `-1` an jeder beliebigen Position eindeutig als "nicht
+gesetzt" nutzbar. Das Board füllt fehlende Werte vor dem Speichern aus dem
+aktuell aktiven Kalibrierungssatz auf (siehe `/servo_config_state`) —
+damit lässt sich gezielt **ein einzelnes Feld** ändern, ohne die anderen elf
+Werte erst korrekt abschreiben zu müssen und dabei versehentlich einen
+bereits richtigen Wert mit einem veralteten zu überschreiben:
+
+```bash
+# Nur vacuum_pwm_invert setzen, alles andere unangetastet lassen
+ros2 topic pub --once /servo_config std_msgs/msg/Int32MultiArray \
+  "{data: [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1]}"
+```
 
 `lift_pwm_jog_offset_us` ist bewusst klein (Default `50` → 1450/1550µs)
 gewählt, um bei der Erst-Inbetriebnahme vorsichtig antasten zu können. Bei
@@ -246,11 +285,38 @@ Scherentisch-Servo angewendet, **sofern er gerade im Ruhezustand ist**
 weiter den zuvor angewendeten Wert zeigen, bis irgendeine unabhängige
 Bewegung den neuen Wert übernimmt. Während einer aktiven Fahrt/eines Jogs
 wird der neue Wert nur gespeichert, aber erst bei der nächsten Ruhephase
-angewendet.
+angewendet. Ein geänderter `vacuum_pwm_min/max_us`/`vacuum_pwm_invert` wird
+(im PWM-Modus) ebenfalls sofort auf die Pumpe angewendet, entsprechend
+ihrem zuletzt kommandierten an/aus-Zustand — unabhängig vom Scherentisch
+gibt es hier keinen "aktive Fahrt"-Zustand, der das verzögern würde.
 
 ```bash
 ros2 topic pub --once /servo_config std_msgs/msg/Int32MultiArray \
-  "{data: [1050, 1980, 1500, 400, 50, 200, 8000, 1, 1]}"
+  "{data: [1050, 1980, 1500, 400, 50, 200, 8000, 1, 1, 1000, 2000, 0]}"
+```
+
+**Bekannt gute Kalibrierung (Stand 2026-08-22, per `/servo_config_state`
+ausgelesen und am Board bestätigt)** -- zum schnellen Wiederherstellen nach
+Experimenten, z.B. nach NVS-Verlust oder auf einem Ersatzboard:
+
+```bash
+ros2 topic pub --once /servo_config std_msgs/msg/Int32MultiArray \
+  "{data: [1989, 973, 1490, 200, 50, 200, 12000, 0, 0, 1223, 1800, 1]}"
+```
+
+### `/servo_config_state` — aktuelle Kalibrierung auslesen
+
+`std_msgs/Int32MultiArray`, 5Hz, exakt dasselbe 12-Werte-Layout wie
+`/servo_config` (siehe Tabelle oben) -- nur eben als Pub statt Sub. Gibt
+den gerade aktiven, aus NVS geladenen (oder per `/servo_config` zuletzt
+gesetzten) Kalibrierungssatz zurück. Praktisch, um z.B. nach einem Reboot
+oder wenn die letzte `/servo_config`-Nachricht nicht mehr in der
+Bash-History steht, den aktuellen Stand einmalig abzulesen -- die
+Ausgabe lässt sich unverändert wieder als `/servo_config`-Payload
+verwenden:
+
+```bash
+ros2 topic echo /servo_config_state --once
 ```
 
 `lift_endstop_active_low` und `lift_direction_up_is_increase` erlauben es,
@@ -362,7 +428,7 @@ Werte) per `/servo_config` dauerhaft speichern:
 
 ```bash
 ros2 topic pub --once /servo_config std_msgs/msg/Int32MultiArray \
-  "{data: [1000, 2000, 1495, 400, 50, 200, 8000, 1, 1]}"
+  "{data: [1000, 2000, 1495, 400, 50, 200, 8000, 1, 1, 1000, 2000, 0]}"
 ```
 Bei kurzzeitig unklarem Verhalten sofort mit `{data: [0, 0, 0]}` stoppen.
 

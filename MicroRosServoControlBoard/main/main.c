@@ -8,7 +8,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "driver/uart.h"
-#include "driver/gpio.h"
 
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
@@ -23,6 +22,7 @@
 #include "servo.h"
 #include "servo_config.h"
 #include "lift.h"
+#include "pump.h"
 
 // Custom UART transport for micro-ROS (identical to ybMecanumWheelMicroRosBot,
 // reuses the same ../extra_components micro-ROS build)
@@ -113,34 +113,11 @@ std_msgs__msg__Int32MultiArray msg_servo_config;
 rcl_publisher_t publisher_telemetry;
 std_msgs__msg__Int32MultiArray msg_telemetry;
 
+// Publisher (current calibration readback, same 12-value layout /servo_config accepts)
+rcl_publisher_t publisher_servo_config_state;
+std_msgs__msg__Int32MultiArray msg_servo_config_state;
+
 rcl_timer_t timer_telemetry;
-
-/** Last commanded vacuum relay state, cached here purely for the /telemetry
- *  array (the GPIO itself is the source of truth for actual hardware state). */
-static bool g_vacuum_on = false;
-
-/**
- * @brief Configure the vacuum relay GPIO as output and ensure it starts off.
- */
-static void vacuum_gpio_init(void)
-{
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1ULL << CONFIG_VACUUM_RELAY_GPIO);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
-    gpio_config(&io_conf);
-    gpio_set_level(CONFIG_VACUUM_RELAY_GPIO, 0);
-    g_vacuum_on = false;
-}
-
-/** @brief Switch the vacuum pump relay on/off and update the cached telemetry state. */
-static void vacuum_set(bool on)
-{
-    gpio_set_level(CONFIG_VACUUM_RELAY_GPIO, on ? 1 : 0);
-    g_vacuum_on = on;
-}
 
 /**
  * @brief Preallocate the fixed-size Int32MultiArray for /scissor/jog.
@@ -159,9 +136,9 @@ static void scissor_jog_ros_init(void)
 /** @brief Preallocate the fixed-size Int32MultiArray for /servo_config. See scissor_jog_ros_init(). */
 static void servo_config_ros_init(void)
 {
-    msg_servo_config.data.data = (int32_t *)malloc(9 * sizeof(int32_t));
+    msg_servo_config.data.data = (int32_t *)malloc(12 * sizeof(int32_t));
     msg_servo_config.data.size = 0;
-    msg_servo_config.data.capacity = 9;
+    msg_servo_config.data.capacity = 12;
 }
 
 /** @brief Preallocate the fixed-size Int32MultiArray used to publish /telemetry. */
@@ -170,6 +147,14 @@ static void telemetry_ros_init(void)
     msg_telemetry.data.data = (int32_t *)malloc(6 * sizeof(int32_t));
     msg_telemetry.data.size = 0;
     msg_telemetry.data.capacity = 6;
+}
+
+/** @brief Preallocate the fixed-size Int32MultiArray used to publish /servo_config_state. */
+static void servo_config_state_ros_init(void)
+{
+    msg_servo_config_state.data.data = (int32_t *)malloc(12 * sizeof(int32_t));
+    msg_servo_config_state.data.size = 0;
+    msg_servo_config_state.data.capacity = 12;
 }
 
 /**
@@ -209,7 +194,7 @@ void camera_tilt_callback(const void *msgin)
 void vacuum_cmd_callback(const void *msgin)
 {
     const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
-    vacuum_set(msg->data);
+    Pump_Set(msg->data);
 }
 
 /**
@@ -267,39 +252,75 @@ void scissor_jog_callback(const void *msgin)
 }
 
 /**
- * @brief /servo_config callback (std_msgs/Int32MultiArray, 9 values):
+ * @brief /servo_config callback (std_msgs/Int32MultiArray, 12 values):
  *        [camera_pwm_min_us, camera_pwm_max_us, lift_pwm_stop_us,
  *         lift_pwm_run_offset_us, lift_pwm_jog_offset_us,
  *         lift_pwm_reengage_offset_us, lift_timeout_ms,
- *         lift_endstop_active_low, lift_direction_up_is_increase].
+ *         lift_endstop_active_low, lift_direction_up_is_increase,
+ *         vacuum_pwm_min_us, vacuum_pwm_max_us, vacuum_pwm_invert].
  *
- * Persists the new calibration to NVS via ServoConfig_Save(). Also
+ * `-1` at any index means "leave this field unchanged" -- every field is a
+ * pulse width (us), offset (us), timeout (ms) or 0/1 flag, so -1 can never
+ * be a real value and is safe to use as a skip sentinel everywhere. Missing
+ * fields are filled in from the currently active values (see
+ * servo_config.h's ServoConfig_Get_*()) before saving, so a partial update
+ * (e.g. only vacuum_pwm_invert) can never accidentally clobber an
+ * already-correct field with a stale/wrong value typed into the same
+ * message -- read /servo_config_state first if unsure what's currently set.
+ *
+ * Persists the merged calibration to NVS via ServoConfig_Save(). Also
  * immediately re-applies the (possibly new) lift_pwm_stop_us to the
  * physical lift servo output if it's currently at rest (see
  * Lift_Refresh_Rest_Output()) -- otherwise /telemetry would keep showing
  * the previously-applied pulse until an unrelated movement happens to pick
  * up the new value, which is confusing while probing for the stop pulse
- * via /scissor/jog + /telemetry.
+ * via /scissor/jog + /telemetry. Likewise re-applies the pump's mapped
+ * output (see Pump_Refresh_Output()) so a min/max/invert-only change takes
+ * effect without waiting for the next /vacuum/cmd.
  */
 void servo_config_callback(const void *msgin)
 {
     const std_msgs__msg__Int32MultiArray *msg = (const std_msgs__msg__Int32MultiArray *)msgin;
-    if (msg->data.size != 9)
+    if (msg->data.size != 12)
     {
-        ESP_LOGE(TAG, "servo_config: expected 9 values, got %u", (unsigned)msg->data.size);
+        ESP_LOGE(TAG, "servo_config: expected 12 values, got %u", (unsigned)msg->data.size);
         return;
     }
 
-    ServoConfig_Save(msg->data.data[0], msg->data.data[1], msg->data.data[2],
-                      msg->data.data[3], msg->data.data[4], msg->data.data[5],
-                      msg->data.data[6], msg->data.data[7], msg->data.data[8]);
+    int32_t merged[12] = {
+        ServoConfig_Get_CameraPwmMinUs(),
+        ServoConfig_Get_CameraPwmMaxUs(),
+        ServoConfig_Get_LiftPwmStopUs(),
+        ServoConfig_Get_LiftPwmRunOffsetUs(),
+        ServoConfig_Get_LiftPwmJogOffsetUs(),
+        ServoConfig_Get_LiftPwmReengageOffsetUs(),
+        ServoConfig_Get_LiftTimeoutMs(),
+        ServoConfig_Get_LiftEndstopActiveLow(),
+        ServoConfig_Get_LiftDirectionUpIsIncrease(),
+        ServoConfig_Get_VacuumPwmMinUs(),
+        ServoConfig_Get_VacuumPwmMaxUs(),
+        ServoConfig_Get_VacuumPwmInvert(),
+    };
+    for (int i = 0; i < 12; i++)
+    {
+        if (msg->data.data[i] != -1) merged[i] = msg->data.data[i];
+    }
+
+    ServoConfig_Save(merged[0], merged[1], merged[2], merged[3], merged[4], merged[5],
+                      merged[6], merged[7], merged[8], merged[9], merged[10], merged[11]);
     Lift_Refresh_Rest_Output();
+    Pump_Refresh_Output();
 }
 
 /**
  * @brief Periodic /telemetry publisher (std_msgs/Int32MultiArray, 6 values):
  *        [lift_state, endstop_up, endstop_down, lift_pwm_us, camera_pwm_us,
  *         vacuum_state]. See lift_state_t in lift.h for the state enum.
+ *
+ * Also publishes /servo_config_state (12 values, same field order as the
+ * /servo_config subscriber, see below) on the same tick -- both are cheap,
+ * low-value-churn reads of on-device state, so sharing this timer avoids a
+ * second executor handle.
  */
 void timer_telemetry_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
@@ -311,10 +332,33 @@ void timer_telemetry_callback(rcl_timer_t *timer, int64_t last_call_time)
     msg_telemetry.data.data[2] = Lift_Get_Endstop_Down() ? 1 : 0;
     msg_telemetry.data.data[3] = Servo_Get_Pulse_Us(SERVO_CHANNEL_LIFT);
     msg_telemetry.data.data[4] = Servo_Get_Pulse_Us(SERVO_CHANNEL_CAMERA);
-    msg_telemetry.data.data[5] = g_vacuum_on ? 1 : 0;
+    msg_telemetry.data.data[5] = Pump_Get_On() ? 1 : 0;
     msg_telemetry.data.size = 6;
 
     RCSOFTCHECK(rcl_publish(&publisher_telemetry, &msg_telemetry, NULL));
+
+    // [camera_pwm_min_us, camera_pwm_max_us, lift_pwm_stop_us,
+    //  lift_pwm_run_offset_us, lift_pwm_jog_offset_us,
+    //  lift_pwm_reengage_offset_us, lift_timeout_ms, lift_endstop_active_low,
+    //  lift_direction_up_is_increase, vacuum_pwm_min_us, vacuum_pwm_max_us,
+    //  vacuum_pwm_invert] -- exactly the field order /servo_config accepts,
+    // so a value read here can be pasted straight back into a /servo_config
+    // publish (e.g. to restore it after an experiment).
+    msg_servo_config_state.data.data[0] = ServoConfig_Get_CameraPwmMinUs();
+    msg_servo_config_state.data.data[1] = ServoConfig_Get_CameraPwmMaxUs();
+    msg_servo_config_state.data.data[2] = ServoConfig_Get_LiftPwmStopUs();
+    msg_servo_config_state.data.data[3] = ServoConfig_Get_LiftPwmRunOffsetUs();
+    msg_servo_config_state.data.data[4] = ServoConfig_Get_LiftPwmJogOffsetUs();
+    msg_servo_config_state.data.data[5] = ServoConfig_Get_LiftPwmReengageOffsetUs();
+    msg_servo_config_state.data.data[6] = ServoConfig_Get_LiftTimeoutMs();
+    msg_servo_config_state.data.data[7] = ServoConfig_Get_LiftEndstopActiveLow();
+    msg_servo_config_state.data.data[8] = ServoConfig_Get_LiftDirectionUpIsIncrease();
+    msg_servo_config_state.data.data[9] = ServoConfig_Get_VacuumPwmMinUs();
+    msg_servo_config_state.data.data[10] = ServoConfig_Get_VacuumPwmMaxUs();
+    msg_servo_config_state.data.data[11] = ServoConfig_Get_VacuumPwmInvert();
+    msg_servo_config_state.data.size = 12;
+
+    RCSOFTCHECK(rcl_publish(&publisher_servo_config_state, &msg_servo_config_state, NULL));
 }
 
 // micro ros processes tasks
@@ -390,7 +434,7 @@ void micro_ros_task(void *arg)
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
         "scissor/jog"));
 
-    // Subscriber /servo_config (std_msgs/Int32MultiArray, 9 values)
+    // Subscriber /servo_config (std_msgs/Int32MultiArray, 12 values)
     RCCHECK(rclc_subscription_init_default(
         &servo_config_subscriber,
         &node,
@@ -403,6 +447,14 @@ void micro_ros_task(void *arg)
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
         "telemetry"));
+
+    // Publisher /servo_config_state (std_msgs/Int32MultiArray, 12 values,
+    // same field order as the /servo_config subscriber above)
+    RCCHECK(rclc_publisher_init_default(
+        &publisher_servo_config_state,
+        &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
+        "servo_config_state"));
 
     // create timer. Publishes /telemetry at 5Hz
     const unsigned int telemetry_timer_timeout = 200;
@@ -468,6 +520,7 @@ void micro_ros_task(void *arg)
     RCCHECK(rcl_subscription_fini(&scissor_jog_subscriber, &node));
     RCCHECK(rcl_subscription_fini(&servo_config_subscriber, &node));
     RCCHECK(rcl_publisher_fini(&publisher_telemetry, &node));
+    RCCHECK(rcl_publisher_fini(&publisher_servo_config_state, &node));
     RCCHECK(rcl_node_fini(&node));
 
     vTaskDelete(NULL);
@@ -475,13 +528,18 @@ void micro_ros_task(void *arg)
 
 void app_main(void)
 {
-    vacuum_gpio_init();
+    // ServoConfig_Init() and Servo_Init() must both run before Pump_Init():
+    // in PWM actuation mode the pump's initial pulse comes from
+    // servo_config's calibration, applied through the LEDC channel/timer
+    // Servo_Init() configures.
     ServoConfig_Init();
     Servo_Init();
+    Pump_Init();
     Lift_Init();
 
     scissor_jog_ros_init();
     servo_config_ros_init();
+    servo_config_state_ros_init();
     telemetry_ros_init();
 
     // Start microROS task

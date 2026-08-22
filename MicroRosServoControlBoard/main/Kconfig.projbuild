@@ -76,12 +76,41 @@ menu "Scherentisch / Kamera / Vakuum Hardware"
             default 33
 
         config VACUUM_RELAY_GPIO
-            int "Vakuumpumpen-Relais (Transistor) GPIO"
+            int "Vakuumpumpen-Ausgang GPIO"
             default 25
             help
-            Kein Pullup, direkter digitaler Ausgang zum Relais-Transistor.
-            Achtung: nicht galvanisch getrennt.
+            Je nach VACUUM_ACTUATION_MODE entweder ein direkter digitaler
+            Ausgang zum Relais-Transistor (kein Pullup, nicht galvanisch
+            getrennt) oder ein PWM-Servo-Ausgang wie beim Scheren-
+            tisch-/Kamera-Servo.
     endmenu
+
+    choice VACUUM_ACTUATION_MODE
+        prompt "Vakuumpumpen-Ansteuerungsart"
+        default VACUUM_ACTUATION_DIGITAL
+        help
+            Reine Build-Zeit-Auswahl, nicht zur Laufzeit umschaltbar. Betrifft
+            nur die Hardware-Ansteuerung von VACUUM_RELAY_GPIO -- das ROS-Topic
+            `/vacuum/cmd` bleibt in beiden Fällen ein einfaches an/aus (Bool).
+
+        config VACUUM_ACTUATION_DIGITAL
+            bool "Digitalausgang (Relais/Transistor)"
+            help
+            Ursprüngliche Ansteuerung. Am Prototyp musste sie wegen
+            induktiver Abschalt-Impulse der Relaisspule ersetzt werden, die
+            den ESP32 trotz Freilaufdiode in einen unklaren Zustand
+            versetzt haben -- siehe VACUUM_ACTUATION_PWM.
+
+        config VACUUM_ACTUATION_PWM
+            bool "PWM (Servo-Ansteuerung)"
+            help
+            Prototyp-Fix: statt des Relais schaltet ein Servo (gleiche
+            LEDC-PWM-Ansteuerung wie Scherentisch-/Kamera-Servo) die Pumpe
+            zwischen zwei kalibrierten Endpositionen um, siehe Menü
+            "Vakuum-Servo Kalibrierung" unten. Eine zukünftige Revision
+            wird vermutlich auf ein Halbleiterrelais wechseln, daher bleibt
+            der Digitalausgang als Option erhalten.
+    endchoice
 
     menu "Endschalter- und Fahrtrichtungs-Logik"
         config LIFT_ENDSTOP_ACTIVE_LOW
@@ -156,6 +185,27 @@ menu "Scherentisch / Kamera / Vakuum Hardware"
         config CAMERA_PWM_AT_90DEG_US
             int "Pulsweite bei 90 Grad Pitch (us)"
             default 2000
+    endmenu
+
+    menu "Vakuum-Servo Kalibrierung (nur bei PWM-Ansteuerung, per /servo_config überschreibbar)"
+        config VACUUM_PWM_MIN_US
+            int "Pulsweite am 'Aus'-Endpunkt (us)"
+            default 1000
+
+        config VACUUM_PWM_MAX_US
+            int "Pulsweite am 'An'-Endpunkt (us)"
+            default 2000
+
+        config VACUUM_PWM_INVERT
+            bool "An/Aus-Zuordnung invertieren"
+            default n
+            help
+            Aus (n): Pumpe an -> VACUUM_PWM_MAX_US, Pumpe aus ->
+            VACUUM_PWM_MIN_US. An (y): vertauscht, ohne die kalibrierten
+            Endpunkte selbst anzufassen -- praktisch, falls der Servo
+            spiegelverkehrt zur Erwartung eingebaut wurde. Dieser Wert ist
+            nur der Startwert beim allerersten Boot -- ab dann per
+            /servo_config-Topic zur Laufzeit umschaltbar.
     endmenu
 
     config SCISSOR_JOG_MAX_PULSE_MS

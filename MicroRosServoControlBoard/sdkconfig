@@ -433,6 +433,9 @@ CONFIG_CAMERA_SERVO_GPIO=33
 CONFIG_VACUUM_RELAY_GPIO=25
 # end of GPIO Pins
 
+# CONFIG_VACUUM_ACTUATION_DIGITAL is not set
+CONFIG_VACUUM_ACTUATION_PWM=y
+
 #
 # Endschalter- und Fahrtrichtungs-Logik
 #
@@ -463,6 +466,14 @@ CONFIG_LIFT_TIMEOUT_MS=8000
 CONFIG_CAMERA_PWM_AT_0DEG_US=1000
 CONFIG_CAMERA_PWM_AT_90DEG_US=2000
 # end of Kamera-Servo Kalibrierung (Default, per /servo_config überschreibbar)
+
+#
+# Vakuum-Servo Kalibrierung (nur bei PWM-Ansteuerung, per /servo_config überschreibbar)
+#
+CONFIG_VACUUM_PWM_MIN_US=1000
+CONFIG_VACUUM_PWM_MAX_US=2000
+# CONFIG_VACUUM_PWM_INVERT is not set
+# end of Vakuum-Servo Kalibrierung (nur bei PWM-Ansteuerung, per /servo_config überschreibbar)
 
 CONFIG_SCISSOR_JOG_MAX_PULSE_MS=500
 # end of Scherentisch / Kamera / Vakuum Hardware

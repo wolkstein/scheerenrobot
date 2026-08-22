@@ -19,8 +19,20 @@ static const char *TAG = "SERVO";
 #define SERVO_PERIOD_US       (1000000 / SERVO_PWM_FREQ_HZ)
 
 /** Last pulse width applied per channel, indexed by servo_channel_t. Read
- *  back by the telemetry publisher, see Servo_Get_Pulse_Us(). */
-static int g_last_pulse_us[2] = { 0, 0 };
+ *  back by the telemetry publisher, see Servo_Get_Pulse_Us(). Sized for all
+ *  three possible channels regardless of CONFIG_VACUUM_ACTUATION_PWM -- the
+ *  pump slot simply stays unused (0) in digital mode. */
+static int g_last_pulse_us[3] = { 0, 0, 0 };
+
+/** Number of LEDC channels Servo_Init() actually configures: lift + camera,
+ *  plus the pump channel only when it's the selected actuation mode -- in
+ *  digital mode CONFIG_VACUUM_RELAY_GPIO is configured as a plain GPIO
+ *  output by pump.c instead, and must not also be claimed by LEDC here. */
+#if CONFIG_VACUUM_ACTUATION_PWM
+#define SERVO_NUM_CHANNELS 3
+#else
+#define SERVO_NUM_CHANNELS 2
+#endif
 
 /**
  * @brief Map a servo_channel_t to its LEDC channel and GPIO.
@@ -35,10 +47,15 @@ static void servo_channel_to_ledc(servo_channel_t channel, ledc_channel_t *out_l
         *out_ledc = LEDC_CHANNEL_0;
         *out_gpio = CONFIG_LIFT_SERVO_GPIO;
     }
-    else
+    else if (channel == SERVO_CHANNEL_CAMERA)
     {
         *out_ledc = LEDC_CHANNEL_1;
         *out_gpio = CONFIG_CAMERA_SERVO_GPIO;
+    }
+    else
+    {
+        *out_ledc = LEDC_CHANNEL_2;
+        *out_gpio = CONFIG_VACUUM_RELAY_GPIO;
     }
 }
 
@@ -53,11 +70,11 @@ void Servo_Init(void)
     };
     ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
 
-    for (servo_channel_t ch = SERVO_CHANNEL_LIFT; ch <= SERVO_CHANNEL_CAMERA; ch++)
+    for (int ch = 0; ch < SERVO_NUM_CHANNELS; ch++)
     {
         ledc_channel_t ledc_ch;
         int gpio;
-        servo_channel_to_ledc(ch, &ledc_ch, &gpio);
+        servo_channel_to_ledc((servo_channel_t)ch, &ledc_ch, &gpio);
 
         ledc_channel_config_t ch_conf = {
             .gpio_num   = gpio,
@@ -77,8 +94,13 @@ void Servo_Init(void)
     Servo_Set_Pulse_Us(SERVO_CHANNEL_LIFT, CONFIG_LIFT_PWM_STOP_US);
     Servo_Set_Pulse_Us(SERVO_CHANNEL_CAMERA, CONFIG_LIFT_PWM_STOP_US);
 
+#if CONFIG_VACUUM_ACTUATION_PWM
+    ESP_LOGI(TAG, "Servo_Init done (lift=GPIO%d, camera=GPIO%d, pump=GPIO%d)",
+             CONFIG_LIFT_SERVO_GPIO, CONFIG_CAMERA_SERVO_GPIO, CONFIG_VACUUM_RELAY_GPIO);
+#else
     ESP_LOGI(TAG, "Servo_Init done (lift=GPIO%d, camera=GPIO%d)",
              CONFIG_LIFT_SERVO_GPIO, CONFIG_CAMERA_SERVO_GPIO);
+#endif
 }
 
 void Servo_Set_Pulse_Us(servo_channel_t channel, int pulse_us)

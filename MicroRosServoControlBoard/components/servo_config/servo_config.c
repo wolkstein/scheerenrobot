@@ -29,6 +29,12 @@ static const char *TAG = "SERVOCFG";
 #define LIFT_DIRECTION_UP_IS_INCREASE_DEFAULT 0
 #endif
 
+#if CONFIG_VACUUM_PWM_INVERT
+#define VACUUM_PWM_INVERT_DEFAULT 1
+#else
+#define VACUUM_PWM_INVERT_DEFAULT 0
+#endif
+
 /** In-memory calibration, initialized from Kconfig defaults, overwritten by
  *  ServoConfig_Init() if NVS has saved values, updated live by ServoConfig_Save().
  *  int32_t (not plain int) because nvs_get_i32()/nvs_set_i32() require that
@@ -42,6 +48,9 @@ static int32_t g_lift_pwm_reengage_offset_us     = CONFIG_LIFT_PWM_REENGAGE_OFFS
 static int32_t g_lift_timeout_ms                 = CONFIG_LIFT_TIMEOUT_MS;
 static int32_t g_lift_endstop_active_low         = LIFT_ENDSTOP_ACTIVE_LOW_DEFAULT;
 static int32_t g_lift_direction_up_is_increase   = LIFT_DIRECTION_UP_IS_INCREASE_DEFAULT;
+static int32_t g_vacuum_pwm_min_us               = CONFIG_VACUUM_PWM_MIN_US;
+static int32_t g_vacuum_pwm_max_us               = CONFIG_VACUUM_PWM_MAX_US;
+static int32_t g_vacuum_pwm_invert               = VACUUM_PWM_INVERT_DEFAULT;
 
 void ServoConfig_Init(void)
 {
@@ -69,15 +78,20 @@ void ServoConfig_Init(void)
     nvs_get_i32(handle, "lift_tout",   &g_lift_timeout_ms);
     nvs_get_i32(handle, "lift_alow",   &g_lift_endstop_active_low);
     nvs_get_i32(handle, "lift_updir",  &g_lift_direction_up_is_increase);
+    nvs_get_i32(handle, "vac_min",     &g_vacuum_pwm_min_us);
+    nvs_get_i32(handle, "vac_max",     &g_vacuum_pwm_max_us);
+    nvs_get_i32(handle, "vac_inv",     &g_vacuum_pwm_invert);
     nvs_close(handle);
 
     ESP_LOGI(TAG, "Loaded: cam=%" PRId32 "-%" PRId32 "us stop=%" PRId32 "us run=%" PRId32
              "us jog=%" PRId32 "us reengage=%" PRId32 "us timeout=%" PRId32
-             "ms active_low=%" PRId32 " up_is_increase=%" PRId32,
+             "ms active_low=%" PRId32 " up_is_increase=%" PRId32
+             " vacuum=%" PRId32 "-%" PRId32 "us invert=%" PRId32,
              g_camera_pwm_min_us, g_camera_pwm_max_us, g_lift_pwm_stop_us,
              g_lift_pwm_run_offset_us, g_lift_pwm_jog_offset_us,
              g_lift_pwm_reengage_offset_us, g_lift_timeout_ms,
-             g_lift_endstop_active_low, g_lift_direction_up_is_increase);
+             g_lift_endstop_active_low, g_lift_direction_up_is_increase,
+             g_vacuum_pwm_min_us, g_vacuum_pwm_max_us, g_vacuum_pwm_invert);
 }
 
 int ServoConfig_Get_CameraPwmMinUs(void)              { return g_camera_pwm_min_us; }
@@ -89,12 +103,17 @@ int ServoConfig_Get_LiftPwmReengageOffsetUs(void)     { return g_lift_pwm_reenga
 int ServoConfig_Get_LiftTimeoutMs(void)               { return g_lift_timeout_ms; }
 int ServoConfig_Get_LiftEndstopActiveLow(void)        { return g_lift_endstop_active_low; }
 int ServoConfig_Get_LiftDirectionUpIsIncrease(void)   { return g_lift_direction_up_is_increase; }
+int ServoConfig_Get_VacuumPwmMinUs(void)              { return g_vacuum_pwm_min_us; }
+int ServoConfig_Get_VacuumPwmMaxUs(void)              { return g_vacuum_pwm_max_us; }
+int ServoConfig_Get_VacuumPwmInvert(void)             { return g_vacuum_pwm_invert; }
 
 void ServoConfig_Save(int camera_pwm_min_us, int camera_pwm_max_us,
                        int lift_pwm_stop_us, int lift_pwm_run_offset_us,
                        int lift_pwm_jog_offset_us, int lift_pwm_reengage_offset_us,
                        int lift_timeout_ms, int lift_endstop_active_low,
-                       int lift_direction_up_is_increase)
+                       int lift_direction_up_is_increase,
+                       int vacuum_pwm_min_us, int vacuum_pwm_max_us,
+                       int vacuum_pwm_invert)
 {
     g_camera_pwm_min_us             = camera_pwm_min_us;
     g_camera_pwm_max_us             = camera_pwm_max_us;
@@ -105,6 +124,9 @@ void ServoConfig_Save(int camera_pwm_min_us, int camera_pwm_max_us,
     g_lift_timeout_ms               = lift_timeout_ms;
     g_lift_endstop_active_low       = lift_endstop_active_low;
     g_lift_direction_up_is_increase = lift_direction_up_is_increase;
+    g_vacuum_pwm_min_us             = vacuum_pwm_min_us;
+    g_vacuum_pwm_max_us             = vacuum_pwm_max_us;
+    g_vacuum_pwm_invert             = vacuum_pwm_invert;
 
     nvs_handle_t handle;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
@@ -121,13 +143,17 @@ void ServoConfig_Save(int camera_pwm_min_us, int camera_pwm_max_us,
     nvs_set_i32(handle, "lift_tout",  lift_timeout_ms);
     nvs_set_i32(handle, "lift_alow",  lift_endstop_active_low);
     nvs_set_i32(handle, "lift_updir", lift_direction_up_is_increase);
+    nvs_set_i32(handle, "vac_min",    vacuum_pwm_min_us);
+    nvs_set_i32(handle, "vac_max",    vacuum_pwm_max_us);
+    nvs_set_i32(handle, "vac_inv",    vacuum_pwm_invert);
     nvs_commit(handle);
     nvs_close(handle);
 
     ESP_LOGI(TAG, "Saved: cam=%d-%dus stop=%dus run=%dus jog=%dus reengage=%dus "
-             "timeout=%dms active_low=%d up_is_increase=%d",
+             "timeout=%dms active_low=%d up_is_increase=%d vacuum=%d-%dus invert=%d",
              camera_pwm_min_us, camera_pwm_max_us, lift_pwm_stop_us,
              lift_pwm_run_offset_us, lift_pwm_jog_offset_us,
              lift_pwm_reengage_offset_us, lift_timeout_ms, lift_endstop_active_low,
-             lift_direction_up_is_increase);
+             lift_direction_up_is_increase, vacuum_pwm_min_us, vacuum_pwm_max_us,
+             vacuum_pwm_invert);
 }
